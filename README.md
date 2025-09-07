@@ -4,17 +4,18 @@
 
 Bu proje, Rust dilinde yazılmış, hafif ve yüksek performanslı bir SIP (Session Initiation Protocol) IVR (Interactive Voice Response) sunucusudur. Temel amacı, harici Rust kütüphanelerine (crate'lere) bağımlı olmadan, gelen SIP çağrılarını karşılamak, önceden belirlenmiş bir ses dosyasını çalmak ve çağrıyı sonlandırmaktır.
 
-Proje, telekom operatörleriyle uyumluluk için G.729 gibi endüstri standardı kodekleri desteklemek amacıyla bir C kütüphanesini Rust FFI (Foreign Function Interface) aracılığıyla entegre eder.
+Proje, telekom operatörleriyle tam entegrasyon ve uyumluluk sağlamak amacıyla tasarlanmış olup, G.729 gibi endüstri standardı kodekleri desteklemek için bir C kütüphanesini Rust FFI (Foreign Function Interface) aracılığıyla entegre eder.
 
 ## Özellikler
 
-- **Sıfır Rust Bağımlılığı:** Projenin ana mantığı, Rust'ın standart kütüphanesi dışında hiçbir harici `crate` kullanmaz.
-- **Geniş Codec Desteği:**
-  - **G.729 (Öncelik 1):** Düşük bant genişliği için `bcg729` C kütüphanesi üzerinden entegre edilmiştir.
-  - **G.711 A-law (PCMA)**
-  - **G.711 µ-law (PCMU)**
-- **Operatör Uyumluluğu:** `Record-Route` başlığını destekleyerek ve uyumsuz kodekler için `488 Not Acceptable Here` yanıtı göndererek telekom standartlarına tam uyum sağlar.
-- **Otomatik Dağıtım (CI/CD):** GitHub Actions ile her sürüm için otomatik olarak Docker imajları ve Windows/Linux için hazır çalıştırılabilir dosyalar üretir.
+-   **Sıfır Rust Bağımlılığı:** Projenin ana mantığı, Rust'ın standart kütüphanesi dışında hiçbir harici `crate` kullanmaz. Bu, minimum dosya boyutu, hızlı derleme ve yüksek güvenlik sağlar.
+-   **Kanıtlanmış Operatör Uyumluluğu:** Sunucu, telekom operatörlerinin proxy (SBC) sunucuları arkasında sorunsuz çalışacak şekilde test edilmiş ve doğrulanmıştır. `Record-Route` ve çoklu `Via` başlıklarını RFC 3261 standardına uygun olarak işler.
+-   **Geniş Codec Desteği:**
+    -   **G.729 (Öncelik 1):** Düşük bant genişliği için `bcg729` C kütüphanesi üzerinden entegre edilmiştir.
+    -   **G.711 A-law (PCMA)**
+    -   **G.711 µ-law (PCMU)**
+-   **Standartlara Uyumlu Hata Yönetimi:** Uyumsuz kodek teklifleri için standartlara uygun `488 Not Acceptable Here` yanıtı gönderir.
+-   **Otomatik Dağıtım (CI/CD):** GitHub Actions ile her sürüm için otomatik olarak Docker imajları ve Windows/Linux için hazır çalıştırılabilir dosyalar üretir ve sunucuya dağıtım yapar.
 
 ---
 
@@ -83,8 +84,8 @@ Eğer kod üzerinde değişiklik yapmak veya projeyi kendiniz derlemek isterseni
 1.  **Rust Toolchain:** [rustup](https://rustup.rs/)
 2.  **Git**
 3.  **C Derleme Altyapısı:**
-    - **Windows:** Visual Studio Build Tools ("C++ ile Masaüstü geliştirme" iş yükü ile).
-    - **Linux (Debian/Ubuntu):** `sudo apt-get install build-essential git`
+    -   **Windows:** Visual Studio Build Tools ("C++ ile Masaüstü geliştirme" iş yükü ile).
+    -   **Linux (Debian/Ubuntu):** `sudo apt-get install build-essential git`
 
 ### Kurulum Adımları
 
@@ -95,6 +96,7 @@ Eğer kod üzerinde değişiklik yapmak veya projeyi kendiniz derlemek isterseni
     ```
 
 2.  **G.729 C Kütüphanesini Klonlayın:**
+    Projenin derleme betiği (`build.rs`), bu kütüphanenin kök dizinde `bcg729` adıyla bulunmasını bekler.
     ```bash
     git clone https://github.com/BelledonneCommunications/bcg729.git
     ```
@@ -108,6 +110,6 @@ Eğer kod üzerinde değişiklik yapmak veya projeyi kendiniz derlemek isterseni
 
 Sunucu, aşağıdaki ortam değişkenleri ile yapılandırılır:
 
--   `SERVER_IP`: Sunucunun genel (public) IP adresi. SDP mesajlarında bu IP adresi kullanılır. (Varsayılan: `127.0.0.1`)
+-   `SERVER_IP`: Sunucunun genel (public) IP adresi. SDP mesajlarında ve SIP başlıklarında bu IP adresi kullanılır. (Varsayılan: `127.0.0.1`)
 -   `SIP_PORT`: Sunucunun dinleyeceği SIP portu. (Varsayılan: `5060`)
 -   `WAV_FILE`: Çalınacak olan ses dosyasının yolu. Dosya formatı **8000Hz, 16-bit, Mono PCM (`.wav`)** olmalıdır. (Varsayılan: `welcome.wav`)
