@@ -1,72 +1,71 @@
-# Sentiric - Karşılama Servisi (Rust Versiyonu - Sıfır Bağımlılık)
+# Sentric SIP Core Service
 
-Bu proje, gelen telefon aramalarını karşılayan, önceden belirlenmiş bir ses dosyasını çalan ve ardından aramayı sonlandıran basit bir VoIP servisinin (B2BUA), **hiçbir harici bağımlılık olmadan** tamamen Rust standart kütüphanesi ile yazılmış prototipidir.
+Bu proje, Rust dilinde yazılmış, hafif ve yüksek performanslı bir SIP (Session Initiation Protocol) IVR (Interactive Voice Response) sunucusudur. Temel amacı, harici Rust kütüphanelerine (crate'lere) bağımlı olmadan, gelen SIP çağrılarını karşılamak, önceden belirlenmiş bir ses dosyasını çalmak ve çağrıyı sonlandırmaktır.
 
-## Projenin Amacı
+Proje, telekom operatörleriyle uyumluluk için G.729 gibi endüstri standardı kodekleri desteklemek amacıyla bir C kütüphanesini Rust FFI (Foreign Function Interface) aracılığıyla entegre eder.
 
-Dışarıdan gelen SIP `INVITE` isteklerine cevap vererek, sunucuda bulunan `welcome.wav` dosyasını arayana RTP protokolü üzerinden dinletmek ve dosya bittiğinde aramayı otomatik olarak `BYE` isteği ile sonlandırmak.
+## Özellikler
 
-## Teknik Gereksinimler
+- **Sıfır Rust Bağımlılığı:** Projenin ana mantığı, Rust'ın standart kütüphanesi dışında hiçbir harici `crate` kullanmaz.
+- **SIP Temel Akış Desteği:** `INVITE`, `ACK` ve `BYE` metodlarını işleyerek tam bir çağrı yaşam döngüsünü yönetir.
+- **Geniş Codec Desteği:**
+  - **G.729 (Öncelik 1):** Düşük bant genişliği için C kütüphanesi (`bcg729`) üzerinden entegre edilmiştir.
+  - **G.711 A-law (PCMA)**
+  - **G.711 µ-law (PCMU)**
+- **Operatör Uyumluluğu:** `Record-Route` başlığını destekleyerek telekom operatörü proxy'leri arkasında doğru çalışır.
+- **Medya Akışı:** Belirtilen bir `.wav` dosyasını (8000Hz, 16-bit, Mono PCM) anlaşılan kodek ile kodlayarak RTP üzerinden canlı olarak akıtır.
+- **Yapılandırılabilirlik:** Ortam değişkenleri (environment variables) aracılığıyla kolayca yapılandırılabilir.
 
-*   **Dil:** Rust
-*   **Bağımlılık:** **Sıfır harici bağımlılık.** Proje sadece Rust standart kütüphanesini kullanır. `cargo build` komutu internet bağlantısı gerektirmez.
-*   **Harici Bağımlılıklar:** Asterisk, FreeSWITCH gibi harici PBX yazılımlarına ihtiyaç **duymaz**.
+## Gereksinimler
 
-## Kurulum
+Bu projeyi derleyip çalıştırabilmek için sisteminizde aşağıdakilerin kurulu olması gerekir:
 
-1.  **Rust Kurulumu:**
-    Sisteminizde Rust'ın kurulu olduğundan emin olun.
+1.  **Rust Toolchain:** [rustup](https://rustup.rs/) aracılığıyla yüklenmiş güncel bir Rust derleyicisi.
+2.  **Git:** `bcg729` C kütüphanesini klonlamak için gereklidir.
+3.  **C Derleme Altyapısı (Toolchain):**
+    - **Windows:** [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022) gereklidir. Kurulum sırasında **"C++ ile Masaüstü geliştirme" (Desktop development with C++)** iş yükünü seçtiğinizden emin olun.
+    - **Linux (Debian/Ubuntu):** `sudo apt-get install build-essential`
+    - **macOS:** Xcode Command Line Tools
+
+## Kurulum ve Çalıştırma
+
+1.  **Ana Projeyi Klonlayın:**
     ```bash
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+    git clone <bu_projenin_git_adresi>
+    cd sentiric-sip-core-service
     ```
 
-2.  **Proje Dosyaları:**
-    Bu dizindeki `Cargo.toml` ve `src/main.rs` dosyalarını oluşturun.
-
-3.  **Derleme:**
-    Proje ana dizinindeyken aşağıdaki komutu çalıştırın. Cargo, hiçbir şey indirmeden projeyi doğrudan derleyecektir.
+2.  **G.729 C Kütüphanesini Klonlayın:**
+    Projenin `build.rs` script'i, C kodunu derlemek için kaynak dosyaları projenin içinde arar. `bcg729` kütüphanesini projenin kök dizinine klonlayın.
     ```bash
-    cargo build --release
+    git clone https://github.com/BelledonneCommunications/bcg729.git
     ```
-    `--release` bayrağı, performans için optimizasyonları aktif hale getirir.
+    Bu komut sonrasında proje dizininizde `bcg729` adında bir klasör oluşmalıdır.
 
-## Yapılandırma (Ortam Değişkenleri)
+3.  **Projeyi Derleyin ve Çalıştırın:**
+    Artık projeyi derlemeye hazırsınız. `--release` bayrağı, üretim ortamları için optimize edilmiş bir çıktı oluşturur.
+    ```bash
+    cargo run --release
+    ```
+    Derleme işlemi, önce `bcg729` C kütüphanesini, ardından Rust kodunu derleyecektir. İşlem tamamlandığında sunucu otomatik olarak başlayacaktır.
 
-Uygulamayı çalıştırmadan önce aşağıdaki ortam değişkenlerini ayarlamanız gerekmektedir:
+## Yapılandırma
 
-*   **`SERVER_IP` (Zorunlu):** Sunucunun dış dünyaya tanıtacağı IP adresi. Yerel testler için `192.168.1.3` gibi yerel IP'nizi kullanabilirsiniz.
-*   **`SIP_PORT` (İsteğe bağlı):** SIP isteklerini dinleyeceği port. Ayarlanmazsa varsayılan olarak `5060` kullanılır.
-*   **`WAV_FILE` (İsteğe bağlı):** Çalınacak olan `.wav` dosyasının yolu. Ayarlanmazsa varsayılan olarak `welcome.wav` kullanılır.
+Sunucu, aşağıdaki ortam değişkenleri ile yapılandırılır:
 
-### Çalıştırma Örneği (Windows PowerShell)
+-   `SERVER_IP`: Sunucunun genel (public) IP adresi. SDP mesajlarında bu IP adresi kullanılır. (Varsayılan: `127.0.0.1`)
+-   `SIP_PORT`: Sunucunun dinleyeceği SIP portu. (Varsayılan: `5060`)
+-   `WAV_FILE`: Çalınacak olan ses dosyasının yolu. Dosya formatı **8000Hz, 16-bit, Mono PCM (`.wav`)** olmalıdır. (Varsayılan: `welcome.wav`)
 
+**Örnek (Linux/macOS):**
+```bash
+export SERVER_IP="192.0.2.10"
+export WAV_FILE="/opt/sounds/greeting.wav"
+cargo run --release```
+
+**Örnek (Windows PowerShell):**
 ```powershell
-# Gerekli değişkenleri ayarla
-$env:SERVER_IP="192.168.1.3"
-
-# (İsteğe bağlı) Diğer değişkenleri ayarla
-$env:SIP_PORT="5080"
-$env:WAV_FILE="sounds/greeting.wav"
-
-# Programı çalıştır
+$env:SERVER_IP = "192.0.2.10"
+$env:WAV_FILE = "C:\sounds\greeting.wav"
 cargo run --release
 ```
-
-Uygulama başarıyla başladığında konsolda aşağıdaki gibi bir çıktı göreceksiniz:
-
-```
-[INFO] [BAŞLATILIYOR] [sentiric-sip-core-service] SIP sunucusu 34.122.40.122:5060 adresinde dinlemede...
-```
-
-## Loglama
-
-Tüm arama aktiviteleri standart çıktıya (konsola) yazdırılacaktır. (Not: Zaman damgası formatı, harici kütüphane kullanılmadığı için daha basittir.)
-
-```
-[INFO] [ARAMA BAŞLADI] [sentiric-sip-core-service] [ÇAĞRI] Arayan: +905548777858, Aranan: +902124548590 Kaynak: 194.48.95.2:5060 HEDEF: 34.122.40.122:5060
-[INFO] [ARAMA CEVAPLANDI] [sentiric-sip-core-service] [CEVAP] Arayan: +905548777858, Aranan: +902124548590 Kaynak: 194.48.95.2:5060 HEDEF: 34.122.40.122:5060
-[INFO] [RTP BAŞLADI] [sentiric-sip-core-service] [SES] Arayan: +905548777858, Aranan: +902124548590 Kaynak: 194.48.95.2:5060 HEDEF: 34.122.40.122:5060
-[INFO] [WAV BİTTİ] [sentiric-sip-core-service] [WAV] Arayan: +905548777858, Aranan: +902124548590 Kaynak: 194.48.95.2:5060 HEDEF: 34.122.40.122:5060
-[INFO] [ARAMA SONLANDI] [sentiric-sip-core-service] [KAPAT] Arayan: +905548777858, Aranan: +902124548590 Kaynak: 194.48.95.2:5060 HEDEF: 34.122.40.122:5060
-```
-
