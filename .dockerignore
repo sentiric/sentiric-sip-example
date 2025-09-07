@@ -1,0 +1,15 @@
+# Docker imajına gereksiz dosyaların kopyalanmasını engelle
+
+# Git ile ilgili dosyalar
+.git
+.gitignore
+
+# Docker ile ilgili dosyalar
+.dockerignore
+Dockerfile
+
+# Rust derleme çıktıları (bunları konteyner içinde kendimiz oluşturacağız)
+/target
+
+# bcg729'un .git klasörü
+/bcg729/.git
