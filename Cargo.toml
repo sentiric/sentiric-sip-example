@@ -1,6 +1,6 @@
 [package]
 name = "sentiric-sip-core-service"
-version = "0.1.0"
+version = "0.1.21"
 edition = "2021"
 
 # Bu bölüm kasten boştur. Proje hiçbir harici Rust kütüphanesi kullanmaz.
