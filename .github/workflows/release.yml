@@ -121,7 +121,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # --- Dağıtım Adımı Son ve Düzeltilmiş Hali ---
+  # --- Dağıtım Adımı API Hatalarına Karşı Güçlendirildi ---
   deploy_to_server:
     name: Deploy to SIP Server
     needs: build_binaries
@@ -145,10 +145,13 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update && sudo apt-get install -y jq
+          
+          # DÜZELTİLDİ: API'den geçerli yanıt alana kadar 5 kez dene
           for i in {1..5}; do
             API_RESPONSE=$(curl -s https://api.github.com/meta)
             if echo "$API_RESPONSE" | jq -e '.actions' > /dev/null; then
               echo "Successfully fetched GitHub meta API on attempt $i."
+              # 'select' ile sadece ':' karakteri içermeyen (yani IPv4 olan) adresleri al
               echo "$API_RESPONSE" | jq -r '.actions[] | select(contains(":") | not)' > all_ips.txt
               break
             else
@@ -156,10 +159,12 @@ jobs:
               sleep 10
             fi
           done
+          
           if [ ! -f all_ips.txt ]; then
             echo "::error::Could not fetch GitHub Actions IP list after 5 attempts."
             exit 1
           fi
+
           split -l 256 -d all_ips.txt ip_chunk_
           echo "chunk_count=$(ls ip_chunk_* | wc -l)" >> "$GITHUB_OUTPUT"
 
@@ -168,18 +173,31 @@ jobs:
         run: |
           CHUNK_COUNT=${{ steps.get_ips.outputs.chunk_count }}
           for i in $(seq 0 $(($CHUNK_COUNT - 1))); do
+            # Dosya adlandırma mantığı `split` komutunun çıktısına uygun hale getirildi (örn: ip_chunk_00, ip_chunk_01)
             CHUNK_FILE=$(printf "ip_chunk_%02d" $i)
             RULE_NAME="${{ env.GCP_FIREWALL_RULE_PREFIX }}-${i}"
             SOURCE_RANGES=$(paste -sd, $CHUNK_FILE)
+            
             echo "Processing rule: $RULE_NAME with $(wc -l < $CHUNK_FILE) IPs..."
+            
             if gcloud compute firewall-rules describe $RULE_NAME --project=${{ secrets.GCP_PROJECT_ID }} &> /dev/null; then
               echo "Firewall rule $RULE_NAME found. Updating..."
-              gcloud compute firewall-rules update $RULE_NAME --project=${{ secrets.GCP_PROJECT_ID }} --source-ranges="$SOURCE_RANGES"
+              gcloud compute firewall-rules update $RULE_NAME \
+                --project=${{ secrets.GCP_PROJECT_ID }} \
+                --source-ranges="$SOURCE_RANGES"
             else
               echo "Firewall rule $RULE_NAME not found. Creating..."
-              gcloud compute firewall-rules create $RULE_NAME --project=${{ secrets.GCP_PROJECT_ID }} --network=default --action=ALLOW --direction=INGRESS --rules=tcp:22 --target-tags=${{ env.GCP_NETWORK_TAG }} --source-ranges="$SOURCE_RANGES"
+              gcloud compute firewall-rules create $RULE_NAME \
+                --project=${{ secrets.GCP_PROJECT_ID }} \
+                --network=default \
+                --action=ALLOW \
+                --direction=INGRESS \
+                --rules=tcp:22 \
+                --target-tags=${{ env.GCP_NETWORK_TAG }} \
+                --source-ranges="$SOURCE_RANGES"
             fi
           done
+          
           EXISTING_RULES=$(gcloud compute firewall-rules list --project=${{ secrets.GCP_PROJECT_ID }} --filter="name~'^${{ env.GCP_FIREWALL_RULE_PREFIX }}-'" --format="value(name)")
           for RULE in $EXISTING_RULES; do
             INDEX=$(echo $RULE | sed 's/.*-//')
