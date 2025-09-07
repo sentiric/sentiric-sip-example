@@ -1,14 +1,18 @@
-// src/sip/response.rs
+// ### File: src/sip/response.rs
 
 use crate::config::Config;
 use crate::rtp::codec::Codec;
 use crate::sip::{types::ActiveCall, SipRequest};
 use crate::util;
 
+// --- GÜNCELLEME BAŞLANGICI ---
+// Bu fonksiyon, gelen istekteki TÜM 'Via' başlıklarını yanıta ekler.
+// Bu, RFC 3261 uyumluluğu için kritik öneme sahiptir.
 pub fn build_trying_response(req: &SipRequest) -> String {
+    let all_via_headers = req.via_headers.join("\r\n");
     format!(
-        "SIP/2.0 100 Trying\r\nVia: {}\r\nFrom: {}\r\nTo: {}\r\nCall-ID: {}\r\nCSeq: {}\r\nContent-Length: 0\r\n\r\n",
-        req.headers.get("via").unwrap_or(&"".to_string()),
+        "SIP/2.0 100 Trying\r\n{}\r\nFrom: {}\r\nTo: {}\r\nCall-ID: {}\r\nCSeq: {}\r\nContent-Length: 0\r\n\r\n",
+        all_via_headers, // Güncellendi
         req.headers.get("from").unwrap_or(&"".to_string()),
         req.headers.get("to").unwrap_or(&"".to_string()),
         req.headers.get("call-id").unwrap_or(&"".to_string()),
@@ -16,23 +20,23 @@ pub fn build_trying_response(req: &SipRequest) -> String {
     )
 }
 
+// Bu fonksiyon, gelen istekteki TÜM 'Via' başlıklarını yanıta ekler.
 pub fn build_ok_response(req: &SipRequest, config: &Config, rtp_port: u16, to_tag: &str, codec: Codec) -> String {
-    // DÜZELTİLDİ: match bloğuna G.729 seçeneği eklendi.
     let (payload_type, codec_name) = match codec {
         Codec::G729 => (18, "G729"),
         Codec::PCMU => (0, "PCMU"),
         Codec::PCMA => (8, "PCMA"),
     };
 
-    // a=sendrecv                      # ← sendonly YERİNE sendrecv
     let sdp = format!(
         "v=0\r\no=- 0 0 IN IP4 {ip}\r\ns=sentiric\r\nc=IN IP4 {ip}\r\nt=0 0\r\nm=audio {port} RTP/AVP {pt}\r\na=rtpmap:{pt} {name}/8000\r\na=sendrecv\r\n",
         ip = config.server_ip, port = rtp_port, pt = payload_type, name = codec_name
     );
 
+    let all_via_headers = req.via_headers.join("\r\n");
     format!(
-        "SIP/2.0 200 OK\r\nVia: {}\r\nFrom: {}\r\nTo: {};tag={}\r\nCall-ID: {}\r\nCSeq: {}\r\nContact: <sip:{}:{}>\r\nContent-Type: application/sdp\r\nContent-Length: {}\r\n\r\n{}",
-        req.headers.get("via").unwrap_or(&"".to_string()),
+        "SIP/2.0 200 OK\r\n{}\r\nFrom: {}\r\nTo: {};tag={}\r\nCall-ID: {}\r\nCSeq: {}\r\nContact: <sip:{}:{}>\r\nContent-Type: application/sdp\r\nContent-Length: {}\r\n\r\n{}",
+        all_via_headers, // Güncellendi
         req.headers.get("from").unwrap_or(&"".to_string()),
         req.headers.get("to").unwrap_or(&"".to_string()), to_tag,
         req.headers.get("call-id").unwrap_or(&"".to_string()),
@@ -41,7 +45,10 @@ pub fn build_ok_response(req: &SipRequest, config: &Config, rtp_port: u16, to_ta
         sdp.len(), sdp
     )
 }
+// --- GÜNCELLEME SONU ---
 
+// Bu fonksiyon yeni bir BYE isteği oluşturduğu için kendi Via başlığını yaratır,
+// bu nedenle burada bir değişiklik GEREKMEZ.
 pub fn build_bye_request(call: &ActiveCall, config: &Config, cseq_num: u32) -> String {
     let our_from_header = call.to_header.replace(super::parser::get_user_from_header(&call.to_header).as_str(), "sentiric");
 
@@ -61,16 +68,19 @@ pub fn build_bye_request(call: &ActiveCall, config: &Config, cseq_num: u32) -> S
     )
 }
 
-/// Genel bir SIP hata yanıtı oluşturur (örn: 488 Not Acceptable Here).
+// --- GÜNCELLEME BAŞLANGICI ---
+// Hata yanıtları da gelen istekteki TÜM 'Via' başlıklarını içermelidir.
 pub fn build_error_response(req: &SipRequest, status_code: u16, reason_phrase: &str) -> String {
+    let all_via_headers = req.via_headers.join("\r\n");
     format!(
-        "SIP/2.0 {} {}\r\nVia: {}\r\nFrom: {}\r\nTo: {};tag={:x}\r\nCall-ID: {}\r\nCSeq: {}\r\nContent-Length: 0\r\n\r\n",
+        "SIP/2.0 {} {}\r\n{}\r\nFrom: {}\r\nTo: {};tag={:x}\r\nCall-ID: {}\r\nCSeq: {}\r\nContent-Length: 0\r\n\r\n",
         status_code,
         reason_phrase,
-        req.headers.get("via").unwrap_or(&"".to_string()),
+        all_via_headers, // Güncellendi
         req.headers.get("from").unwrap_or(&"".to_string()),
         req.headers.get("to").unwrap_or(&"".to_string()), util::get_timestamp_ms(),
         req.headers.get("call-id").unwrap_or(&"".to_string()),
         req.headers.get("cseq").unwrap_or(&"".to_string())
     )
 }
+// --- GÜNCELLEME SONU ---
