@@ -1,0 +1,7 @@
+[package]
+name = "sentiric-sip-core-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Bu bölüm kasten boştur. Proje, sadece Rust standart kütüphanesini kullanır.
