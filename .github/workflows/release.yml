@@ -14,6 +14,7 @@ env:
 jobs:
   # --- Build ve Docker adımları aynı kalıyor ---
   create_release:
+    # ... (İÇERİK DEĞİŞMEDİ, ÖNCEKİ GİBİ TAM OLMALI) ...
     name: Create GitHub Release
     runs-on: ubuntu-latest
     outputs:
@@ -32,8 +33,8 @@ jobs:
             Assets include native binaries for Linux and Windows, and a Docker image.
           draft: false
           prerelease: false
-
   build_binaries:
+    # ... (İÇERİK DEĞİŞMEDİ, ÖNCEKİ GİBİ TAM OLMALI) ...
     name: Build Native Binaries
     needs: create_release
     runs-on: ${{ matrix.os }}
@@ -90,8 +91,8 @@ jobs:
           asset_path: ./${{ matrix.asset_name }}
           asset_name: ${{ matrix.asset_name }}
           asset_content_type: application/octet-stream
-
   build_and_publish_docker:
+    # ... (İÇERİK DEĞİŞMEDİ, ÖNCEKİ GİBİ TAM OLMALI) ...
     name: Build and Publish Docker Image
     needs: create_release
     runs-on: ubuntu-latest
@@ -120,10 +121,10 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # --- Dağıtım Adımı API Hatalarına Karşı Güçlendirildi ---
+  # --- Dağıtım Adımı PID Dosyası Kullanacak Şekilde Düzeltildi ---
   deploy_to_server:
     name: Deploy to SIP Server
-    needs: build_binaries
+    needs: [create_release, build_binaries] # build_binaries'in bitmesini bekle
     runs-on: ubuntu-latest
     
     permissions:
@@ -196,22 +197,22 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           timeout: 3m
           script: |
-            set -e # Herhangi bir hata olursa script'i hemen durdur
+            set -e
             echo "--- Sunucuda dağıtım başlıyor ---"
             
             echo "1. Dizin oluşturuluyor..."
             mkdir -p ~/app/sentiric-sip
             cd ~/app/sentiric-sip
             
-            # DÜZELTİLDİ: Süreci PID dosyası ile güvenli bir şekilde durdur
             echo "2. Varsa eski servis PID dosyası ile durduruluyor..."
             if [ -f sentiric.pid ]; then
-              echo "PID file found. Killing process $(cat sentiric.pid)..."
-              kill $(cat sentiric.pid) || true
+              echo "PID dosyası bulundu. Süreç sonlandırılıyor: $(cat sentiric.pid)..."
+              kill $(cat sentiric.pid) || echo "Süreç zaten çalışmıyor olabilir."
               rm sentiric.pid
             else
-              echo "No PID file found. Using pkill as a fallback..."
-              pkill -f sentiric-sip-core-service || echo "No process found to kill."
+              echo "PID dosyası bulunamadı. Fallback olarak pkill kullanılıyor..."
+              # Kendini öldürmesini engellemek için daha spesifik bir pkill
+              pkill -f "^./sentiric-sip-core-service" || echo "Durdurulacak bir servis bulunamadı."
             fi
             
             echo "3. Yeni sürüm indiriliyor..."
@@ -223,10 +224,9 @@ jobs:
             echo "5. Çalıştırma izinleri ayarlanıyor..."
             chmod +x sentiric-sip-core-service
             
-            # DÜZELTİLDİ: Servisi başlat ve PID'sini dosyaya yaz
             echo "6. Yeni servis arka planda başlatılıyor ve PID kaydediliyor..."
             export SERVER_IP=${{ secrets.SSH_HOST }}
             nohup ./sentiric-sip-core-service > service.log 2>&1 &
             echo $! > sentiric.pid
             
-            echo "--- Dağıtım başarıyla tamamlandı! PID: $(cat sentiric.pid) ---"
+            echo "--- Dağıtım başarıyla tamamlandı! Yeni PID: $(cat sentiric.pid) ---"
