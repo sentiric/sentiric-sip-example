@@ -59,3 +59,17 @@ pub fn build_bye_request(call: &ActiveCall, config: &Config, cseq_num: u32) -> S
         cseq_num
     )
 }
+
+/// Genel bir SIP hata yanıtı oluşturur (örn: 488 Not Acceptable Here).
+pub fn build_error_response(req: &SipRequest, status_code: u16, reason_phrase: &str) -> String {
+    format!(
+        "SIP/2.0 {} {}\r\nVia: {}\r\nFrom: {}\r\nTo: {};tag={:x}\r\nCall-ID: {}\r\nCSeq: {}\r\nContent-Length: 0\r\n\r\n",
+        status_code,
+        reason_phrase,
+        req.headers.get("via").unwrap_or(&"".to_string()),
+        req.headers.get("from").unwrap_or(&"".to_string()),
+        req.headers.get("to").unwrap_or(&"".to_string()), util::get_timestamp_ms(),
+        req.headers.get("call-id").unwrap_or(&"".to_string()),
+        req.headers.get("cseq").unwrap_or(&"".to_string())
+    )
+}
