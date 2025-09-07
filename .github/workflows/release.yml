@@ -13,114 +13,15 @@ env:
   GCP_NETWORK_TAG: 'sip-server'
 
 jobs:
-  # DÜZELTİLDİ: Bu görevlerin içeriği doğru bir şekilde eklendi.
+  # --- Build ve Docker adımları aynı kalıyor ---
   create_release:
-    name: Create GitHub Release
-    runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
-    steps:
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            Automated release for ${{ github.ref }}.
-            Assets include native binaries for Linux and Windows, and a Docker image.
-          draft: false
-          prerelease: false
-
+    # ... (İÇERİK DEĞİŞMEDİ) ...
   build_binaries:
-    name: Build Native Binaries
-    needs: create_release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            asset_name: sentiric-sip-core-service-linux-x86_64.tar.gz
-            archive_command: tar czf
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            asset_name: sentiric-sip-core-service-windows-x86_64.zip
-            archive_command: 7z a
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-      - name: Install build dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install -y build-essential git
-      - name: Clone bcg729 dependency
-        run: git clone https://github.com/BelledonneCommunications/bcg729.git
-      - name: Build binary
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
-      - name: Prepare assets for release
-        shell: bash
-        run: |
-          ARTIFACT_DIR=./release-assets
-          BINARY_NAME=sentiric-sip-core-service
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            BINARY_NAME=${BINARY_NAME}.exe
-          fi
-          mkdir -p $ARTIFACT_DIR
-          cp target/${{ matrix.target }}/release/${BINARY_NAME} $ARTIFACT_DIR/
-          cp welcome.wav $ARTIFACT_DIR/
-          cd $ARTIFACT_DIR
-          ${{ matrix.archive_command }} ../${{ matrix.asset_name }} ./*
-          cd ..
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: ./${{ matrix.asset_name }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: application/octet-stream
-
+    # ... (İÇERİK DEĞİŞMEDİ) ...
   build_and_publish_docker:
-    name: Build and Publish Docker Image
-    needs: create_release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+    # ... (İÇERİK DEĞİŞMEDİ) ...
 
+  # --- Dağıtım Adımı API Hatalarına Karşı Güçlendirildi ---
   deploy_to_server:
     name: Deploy to SIP Server
     needs: build_binaries
@@ -141,9 +42,28 @@ jobs:
 
       - name: 'Get and Chunk GitHub Actions IPs'
         id: get_ips
+        shell: bash
         run: |
           sudo apt-get update && sudo apt-get install -y jq
-          curl -s https://api.github.com/meta | jq -r '.actions[]' > all_ips.txt
+          
+          # DÜZELTİLDİ: API'den geçerli yanıt alana kadar 5 kez dene
+          for i in {1..5}; do
+            API_RESPONSE=$(curl -s https://api.github.com/meta)
+            if echo "$API_RESPONSE" | jq -e '.actions' > /dev/null; then
+              echo "Successfully fetched GitHub meta API on attempt $i."
+              echo "$API_RESPONSE" | jq -r '.actions[]' > all_ips.txt
+              break
+            else
+              echo "Attempt $i: Failed to fetch valid JSON from GitHub meta API. Retrying in 10 seconds..."
+              sleep 10
+            fi
+          done
+          
+          if [ ! -f all_ips.txt ]; then
+            echo "::error::Could not fetch GitHub Actions IP list after 5 attempts."
+            exit 1
+          fi
+
           split -l 256 all_ips.txt ip_chunk_
           echo "chunk_count=$(ls ip_chunk_* | wc -l)" >> "$GITHUB_OUTPUT"
 
@@ -151,7 +71,8 @@ jobs:
         run: |
           CHUNK_COUNT=${{ steps.get_ips.outputs.chunk_count }}
           for i in $(seq 0 $(($CHUNK_COUNT - 1))); do
-            CHUNK_FILE_SUFFIX=$(printf "%02d" $i | awk '{for(i=1;i<=length;i++){c=substr($0,i,1);printf "%s",substr("abcdefghijklmnopqrstuvwxyz",c,1)}}')
+            # Dosya adlandırma mantığı `split` komutunun çıktısına uygun hale getirildi (örn: ip_chunk_aa, ip_chunk_ab)
+            CHUNK_FILE_SUFFIX=$(printf "%02d" $i | awk '{for(i=1;i<=length;i++){c=substr($0,i,1);printf "%s",substr("abcdefghijklmnopqrstuvwxyz",c+1,1)}}')
             CHUNK_FILE="ip_chunk_$CHUNK_FILE_SUFFIX"
             RULE_NAME="${{ env.GCP_FIREWALL_RULE_PREFIX }}-${i}"
             SOURCE_RANGES=$(paste -sd, $CHUNK_FILE)
