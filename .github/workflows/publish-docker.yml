@@ -4,10 +4,10 @@ name: Publish Docker Image
 
 on:
   push:
-    # Sadece main branch'e push yapıldığında çalışsın
-    branches: [ "main" ]
-    # Veya v* ile başlayan bir tag push'landığında (örn: v1.0.0)
-    tags: [ "v*.*.*" ]
+    # DÜZELTİLDİ: Artık sadece main branch'e push yapıldığında çalışacak.
+    # Tag'ler için tetiklenmeyecek.
+    branches:
+      - 'main'
 
 jobs:
   build_and_publish:
@@ -32,6 +32,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
+          # Sadece 'main' branch'i için 'latest' ve 'main' etiketlerini oluştur
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=main
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -39,4 +43,4 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}```
+          labels: ${{ steps.meta.outputs.labels }}
