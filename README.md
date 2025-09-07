@@ -30,32 +30,25 @@ Dışarıdan gelen SIP `INVITE` isteklerine cevap vererek, sunucuda bulunan `wel
     ```
     `--release` bayrağı, performans için optimizasyonları aktif hale getirir.
 
-## Yapılandırma
+## Yapılandırma (Ortam Değişkenleri)
 
-1.  **Sunucu IP Adresi:**
-    Uygulamanın çalışacağı sunucunun genel (public) IP adresini `src/main.rs` dosyasının en üstündeki `SERVER_IP` sabitinde belirtmeniz gerekmektedir.
-    ```rust
-    // src/main.rs
-    const SERVER_IP: &str = "34.122.40.122"; // <-- BU SATIRI KENDİ SUNUCU IP'NİZ İLE DEĞİŞTİRİN
-    ```
+Uygulamayı çalıştırmadan önce aşağıdaki ortam değişkenlerini ayarlamanız gerekmektedir:
 
-2.  **Ses Dosyası:**
-    Çalınacak ses dosyasının `welcome.wav` adıyla ana proje dizininde bulunduğundan emin olun. Dosyanın formatı **PCM, 16-bit, 8000 Hz, Mono** olmalıdır. Uygulama, bu formatı G.711 A-Law formatına otomatik olarak çevirecektir.
+*   **`SERVER_IP` (Zorunlu):** Sunucunun dış dünyaya tanıtacağı IP adresi. Yerel testler için `192.168.1.3` gibi yerel IP'nizi kullanabilirsiniz.
+*   **`SIP_PORT` (İsteğe bağlı):** SIP isteklerini dinleyeceği port. Ayarlanmazsa varsayılan olarak `5060` kullanılır.
+*   **`WAV_FILE` (İsteğe bağlı):** Çalınacak olan `.wav` dosyasının yolu. Ayarlanmazsa varsayılan olarak `welcome.wav` kullanılır.
 
-## Çalıştırma
+### Çalıştırma Örneği (Windows PowerShell)
 
-Derleme sonrası oluşan çalıştırılabilir dosyayı doğrudan çalıştırabilirsiniz:
+```powershell
+# Gerekli değişkenleri ayarla
+$env:SERVER_IP="192.168.1.3"
 
-```bash
-# Windows için:
-target\release\sentiric-sip-core-service.exe
+# (İsteğe bağlı) Diğer değişkenleri ayarla
+$env:SIP_PORT="5080"
+$env:WAV_FILE="sounds/greeting.wav"
 
-# Linux / macOS için:
-./target/release/sentiric-sip-core-service
-```
-
-Veya `cargo` ile de çalıştırabilirsiniz:
-```bash
+# Programı çalıştır
 cargo run --release
 ```
 

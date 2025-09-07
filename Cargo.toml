@@ -4,4 +4,5 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Bu bölüm kasten boştur. Proje, sadece Rust standart kütüphanesini kullanır.
+# Loglara hassas zaman damgası eklemek için projenin tek bağımlılığı.
+chrono = "0.4"
