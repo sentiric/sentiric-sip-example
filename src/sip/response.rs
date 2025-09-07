@@ -24,8 +24,9 @@ pub fn build_ok_response(req: &SipRequest, config: &Config, rtp_port: u16, to_ta
         Codec::PCMA => (8, "PCMA"),
     };
 
+    // a=sendrecv                      # ← sendonly YERİNE sendrecv
     let sdp = format!(
-        "v=0\r\no=- 0 0 IN IP4 {ip}\r\ns=sentiric\r\nc=IN IP4 {ip}\r\nt=0 0\r\nm=audio {port} RTP/AVP {pt}\r\na=rtpmap:{pt} {name}/8000\r\na=sendonly\r\n",
+        "v=0\r\no=- 0 0 IN IP4 {ip}\r\ns=sentiric\r\nc=IN IP4 {ip}\r\nt=0 0\r\nm=audio {port} RTP/AVP {pt}\r\na=rtpmap:{pt} {name}/8000\r\na=sendrecv\r\n",
         ip = config.server_ip, port = rtp_port, pt = payload_type, name = codec_name
     );
 
