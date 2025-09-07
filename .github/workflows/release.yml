@@ -7,8 +7,13 @@ on:
     tags:
       - 'v*.*.*'
 
+env:
+  # Ayarları merkezi bir yerden yönetelim
+  GCP_FIREWALL_RULE_NAME: 'allow-ssh-from-github-actions'
+  GCP_NETWORK_TAG: 'sip-server'
+
 jobs:
-  # --- ÖNCEKİ ADIMLAR AYNI KALIYOR ---
+  # --- Build ve Docker adımları aynı kalıyor ---
   create_release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -30,8 +35,8 @@ jobs:
           prerelease: false
 
   build_binaries:
+    # ... (İÇERİK DEĞİŞMEDİ) ...
     name: Build Native Binaries
-    # ... (BU BÖLÜM HİÇ DEĞİŞMEDİ, AYNI KALIYOR) ...
     needs: create_release
     runs-on: ${{ matrix.os }}
     strategy:
@@ -90,7 +95,6 @@ jobs:
           asset_name: ${{ matrix.asset_name }}
           asset_content_type: application/octet-stream
 
-  # ... Docker adımı da aynı kalıyor ...
   build_and_publish_docker:
     # ... (İÇERİK DEĞİŞMEDİ) ...
     name: Build and Publish Docker Image
@@ -121,38 +125,65 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
-  # --- YENİ EKLENEN BÖLÜM BURASI ---
+  # --- Dağıtım Adımı Tamamen Yenilendi ---
   deploy_to_server:
     name: Deploy to SIP Server
-    needs: build_binaries # Sadece Linux binary'si oluştuktan sonra başla
+    needs: build_binaries
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
     steps:
-      - name: Deploy binary via SSH
+      - name: 'Authenticate to Google Cloud'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Get latest GitHub Actions IPs'
+        id: get_ips
+        run: |
+          # JQ'nun kurulu olduğundan emin ol
+          sudo apt-get install -y jq
+          GITHUB_IPS=$(curl -s https://api.github.com/meta | jq -r '.actions | join(",")')
+          echo "ips=$GITHUB_IPS" >> "$GITHUB_OUTPUT"
+      
+      - name: 'Update GCP Firewall Rule'
+        run: |
+          # Kuralın zaten var olup olmadığını kontrol et
+          if gcloud compute firewall-rules describe ${{ env.GCP_FIREWALL_RULE_NAME }} --project=${{ secrets.GCP_PROJECT_ID }} &> /dev/null; then
+            echo "Firewall rule found. Updating..."
+            gcloud compute firewall-rules update ${{ env.GCP_FIREWALL_RULE_NAME }} \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --source-ranges='${{ steps.get_ips.outputs.ips }}'
+          else
+            echo "Firewall rule not found. Creating..."
+            gcloud compute firewall-rules create ${{ env.GCP_FIREWALL_RULE_NAME }} \
+              --project=${{ secrets.GCP_PROJECT_ID }} \
+              --network=default \
+              --action=ALLOW \
+              --direction=INGRESS \
+              --rules=tcp:22 \
+              --target-tags=${{ env.GCP_NETWORK_TAG }} \
+              --source-ranges='${{ steps.get_ips.outputs.ips }}'
+          fi
+
+      - name: 'Deploy binary via SSH'
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Çalışma dizinine git, yoksa oluştur
             mkdir -p ~/app/sentiric-sip
             cd ~/app/sentiric-sip
-
-            # Varsa eski süreci durdur
             pkill -f sentiric-sip-core-service || true
-
-            # GitHub'dan en son Linux sürümünü indir
-            # Not: ${{ github.ref_name }} tag adını (örn: v0.1.0) verir
             wget -q https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sentiric-sip-core-service-linux-x86_64.tar.gz -O release.tar.gz
-
-            # İndirilen arşivi aç ve üzerine yaz
             tar -xzvf release.tar.gz
-
-            # Çalıştırılabilir izni ver
             chmod +x sentiric-sip-core-service
-
-            # Ortam değişkenlerini ayarla ve programı arka planda başlat
-            # nohup: SSH bağlantısı kapansa bile çalışmaya devam etmesini sağlar
-            # &    : komutu arka plana atar
             export SERVER_IP=${{ secrets.SSH_HOST }}
             nohup ./sentiric-sip-core-service > service.log 2>&1 &
