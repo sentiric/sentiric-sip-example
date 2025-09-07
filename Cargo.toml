@@ -3,6 +3,5 @@ name = "sentiric-sip-core-service"
 version = "0.1.0"
 edition = "2021"
 
+# Bu bölüm kasten boştur. Proje hiçbir harici kütüphane kullanmaz.
 [dependencies]
-# Loglara hassas zaman damgası eklemek için projenin tek bağımlılığı.
-chrono = "0.4"
