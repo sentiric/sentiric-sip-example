@@ -89,7 +89,7 @@ fn handle_sip_message(start_time: Instant, sock: Arc<UdpSocket>, data: &[u8], re
                 "INVITE" => handle_invite(start_time, sock, request, remote_addr, server_ip, wav_path, state)?,
                 "ACK" => log(start_time, "DEBUG", "TEYİT ALINDI", "SIP", &format!("İstemciden ACK alındı: {}", remote_addr)),
                 "BYE" => handle_bye(start_time, request, state)?,
-                _ => {} // Bilinmeyen metodları yoksay
+                _ => {}
             }
         },
         Err(e) => { log(start_time, "WARN", "PARSE HATASI", "SIP", &format!("Gelen SIP mesajı ayrıştırılamadı (Kaynak: {}): {}", remote_addr, e)); }
@@ -335,49 +335,38 @@ fn parse_sdp_for_codecs(sdp: &str) -> Vec<Codec> {
 
 /// Bu, ITU-T G.711 standardına uygun, endüstri standardı bir A-Law çevrim algoritmasıdır.
 fn pcm_s16_to_alaw(pcm_val: i16) -> u8 {
-    let mut sample = pcm_val;
-    
-    // İşaret bitini kontrol et. `i16` negatifse, en soldaki bit 1'dir.
-    // Rust'ın katı tür denetimi nedeniyle, bu işlemi `u16` üzerinde yapıp sonra `i16`'ya çeviriyoruz.
-    let sign = (sample & (0x8000u16 as i16)) != 0;
+    let mut pval = pcm_val;
+    let sign = (pval & (0x8000u16 as i16)) != 0;
 
     if sign {
-        // Negatifse, mutlak değerini al.
-        sample = -sample;
+        pval = !pval;
     }
-
-    if sample > 0x7FFF {
-        sample = 0x7FFF;
-    }
-    
-    let mut exponent: i16 = 7;
-    for i in (0..=6).rev() {
-        if (sample & (1 << (i + 4))) == 0 {
-            exponent = i;
-        } else {
-            break;
-        }
-    }
-
-    let mantissa = if exponent > 0 {
-        (sample >> (exponent + 3)) & 0x0F
+    if pval < 256 {
+        pval >>= 4;
+    } else if pval < 512 {
+        pval = (pval >> 5) + 16;
+    } else if pval < 1024 {
+        pval = (pval >> 6) + 32;
+    } else if pval < 2048 {
+        pval = (pval >> 7) + 48;
+    } else if pval < 4096 {
+        pval = (pval >> 8) + 64;
+    } else if pval < 8192 {
+        pval = (pval >> 9) + 80;
+    } else if pval < 16384 {
+        pval = (pval >> 10) + 96;
     } else {
-        (sample >> 4) & 0x0F
-    };
-    
-    let mut alaw: i16 = (exponent << 4) | mantissa;
-    
-    if !sign {
-        alaw |= 0x80;
+        pval = (pval >> 11) + 112;
     }
-
-    (alaw as u8) ^ 0x55
+    
+    let result = if sign { pval as u8 } else { pval as u8 | 0x80 };
+    result ^ 0x55
 }
 
 /// Bu, ITU-T G.711 standardına uygun, endüstri standardı bir µ-Law çevrim algoritmasıdır.
 fn pcm_s16_to_ulaw(pcm_val: i16) -> u8 {
     const BIAS: i16 = 0x84;
-    const MAX: i16 = 0x7F7F;
+    const MAX: i16 = 32100;
 
     let sign = (pcm_val >> 8) & 0x80;
     let mut sample = if sign != 0 { -pcm_val } else { pcm_val };
