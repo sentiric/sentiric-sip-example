@@ -1,14 +1,14 @@
 # .github/workflows/release.yml
 
-name: Create Release and Build Binaries
+name: Create Release, Build and Deploy
 
 on:
   push:
-    # Sadece v* ile başlayan bir tag push'landığında çalışsın (örn: v1.0.0, v1.2.3)
     tags:
       - 'v*.*.*'
 
 jobs:
+  # --- ÖNCEKİ ADIMLAR AYNI KALIYOR ---
   create_release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -31,6 +31,7 @@ jobs:
 
   build_binaries:
     name: Build Native Binaries
+    # ... (BU BÖLÜM HİÇ DEĞİŞMEDİ, AYNI KALIYOR) ...
     needs: create_release
     runs-on: ${{ matrix.os }}
     strategy:
@@ -46,51 +47,39 @@ jobs:
             artifact_name: sentiric-sip-core-service-windows-x86_64.exe
             asset_name: sentiric-sip-core-service-windows-x86_64.zip
             archive_command: 7z a
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: ${{ matrix.target }}
           override: true
-
       - name: Install build dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y build-essential git
-
       - name: Clone bcg729 dependency
         run: git clone https://github.com/BelledonneCommunications/bcg729.git
-
       - name: Build binary
         uses: actions-rs/cargo@v1
         with:
           command: build
           args: --release --target ${{ matrix.target }}
-
       - name: Prepare assets for release
         shell: bash
         run: |
-          # Dizin ve dosya adlarını ayarla
           ARTIFACT_DIR=./release-assets
           BINARY_NAME=sentiric-sip-core-service
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
             BINARY_NAME=${BINARY_NAME}.exe
           fi
-          
           mkdir -p $ARTIFACT_DIR
-          # Derlenmiş binary'yi ve örnek .wav dosyasını kopyala
           cp target/${{ matrix.target }}/release/${BINARY_NAME} $ARTIFACT_DIR/
           cp welcome.wav $ARTIFACT_DIR/
-          
-          # Arşivle
           cd $ARTIFACT_DIR
           ${{ matrix.archive_command }} ../${{ matrix.asset_name }} ./*
           cd ..
-
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
         env:
@@ -101,7 +90,9 @@ jobs:
           asset_name: ${{ matrix.asset_name }}
           asset_content_type: application/octet-stream
 
+  # ... Docker adımı da aynı kalıyor ...
   build_and_publish_docker:
+    # ... (İÇERİK DEĞİŞMEDİ) ...
     name: Build and Publish Docker Image
     needs: create_release
     runs-on: ubuntu-latest
@@ -111,20 +102,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Log in to the Container registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
@@ -132,3 +120,39 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # --- YENİ EKLENEN BÖLÜM BURASI ---
+  deploy_to_server:
+    name: Deploy to SIP Server
+    needs: build_binaries # Sadece Linux binary'si oluştuktan sonra başla
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy binary via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Çalışma dizinine git, yoksa oluştur
+            mkdir -p ~/app/sentiric-sip
+            cd ~/app/sentiric-sip
+
+            # Varsa eski süreci durdur
+            pkill -f sentiric-sip-core-service || true
+
+            # GitHub'dan en son Linux sürümünü indir
+            # Not: ${{ github.ref_name }} tag adını (örn: v0.1.0) verir
+            wget -q https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/sentiric-sip-core-service-linux-x86_64.tar.gz -O release.tar.gz
+
+            # İndirilen arşivi aç ve üzerine yaz
+            tar -xzvf release.tar.gz
+
+            # Çalıştırılabilir izni ver
+            chmod +x sentiric-sip-core-service
+
+            # Ortam değişkenlerini ayarla ve programı arka planda başlat
+            # nohup: SSH bağlantısı kapansa bile çalışmaya devam etmesini sağlar
+            # &    : komutu arka plana atar
+            export SERVER_IP=${{ secrets.SSH_HOST }}
+            nohup ./sentiric-sip-core-service > service.log 2>&1 &
