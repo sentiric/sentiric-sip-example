@@ -29,8 +29,12 @@ RUN cargo build --release
 # Bu, son imaj boyutunu önemli ölçüde küçültür.
 FROM debian:bookworm-slim
 
-# Güvenlik ve bakım için gerekli minimum paketleri kur
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+# --- Çalışma zamanı sistem bağımlılıkları ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    netcat-openbsd \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* 
 
 # Derlenmiş olan binary dosyasını Builder aşamasından bu aşamaya kopyala
 COPY --from=builder /usr/src/app/target/release/sentiric-sip-core-service /usr/local/bin/sentiric-sip-core-service
